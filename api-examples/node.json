@@ -1,0 +1,62 @@
+{
+    "status": "unchanged",
+    "node_groups": [
+        {
+            "source": {
+                "href": "https://puppet-dashboard/api/group/follower_redis",
+                "type": "node_group",
+                "name": "follower_redis"
+            },
+            "href": "https://puppet-dashboard/api/group/redis",
+            "name": "redis"
+        },
+        {
+            "source": {
+                "href": "https://puppet-dashboard/api/node/followerredis001a",
+                "type": "node",
+                "name": "follower_redis"
+            },
+            "href": "https://puppet-dashboard/api/group/redis",
+            "name": "redis"
+        }
+    ],
+    "node_classes": [
+        {
+            "name": "redis",
+            "href": "https://puppet-dashboard/api/class/redis",
+            "source": {
+                "type": "node_group",
+                "name": "redis",
+                "href": "https://puppet-dashboard/api/group/redis"
+            }
+        },
+        {
+            "name": "redis::backup",
+            "href": "https://puppet-dashboard/api/class/redis::backup",
+            "source": {
+                "type": "node_group",
+                "name": "follower_redis",
+                "href": "https://puppet-dashboard/api/group/follower_redis"
+            }
+        }
+    ],
+    "facts": {
+        "ipaddress": "10.131.60.134",
+        "operatingsystem": "Ubuntu",
+        "kernelversion": "2.6.38",
+        "ec2_instance_id": "i-17500aaf",
+        "ec2_instance_type": "m2.2xlarge",
+        "ec2_placement_availability_zone": "us-east-1a"
+    },
+    "parameters": {
+        "swapfile_size": {
+            "key": "swapfile_size",
+            "value": "10240",
+            "source": {
+                "type": "node_group",
+                "name": "follower_redis",
+                "href": "https://puppet-dashboard/api/group/follower_redis"
+            }
+        }
+    }
+}

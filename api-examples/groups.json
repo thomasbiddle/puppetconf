@@ -1,0 +1,14 @@
+[
+    {
+        "name": "datalayer",
+        "url": "https://puppet-dashboard/api/group/datalayer"
+    },
+    {
+        "name": "follower",
+        "url": "https://puppet-dashboard/api/group/follower"
+    },
+    {
+        "name": "mysql",
+        "url": "https://puppet-dashboard/api/group/mysql"
+    }
+]

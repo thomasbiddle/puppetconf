@@ -1,0 +1,92 @@
+{
+    "nodes": [
+        {
+            "name": "followerredis001a",
+            "href": "https://puppet-dashboard/api/node/followerredis001a",
+            "source": {
+                "type": "node_group",
+                "name": "follower_redis",
+                "href": "https://puppet-dashboard/api/group/follower_redis"
+            }
+        },
+        {
+            "name": "followerredis001b",
+            "href": "https://puppet-dashboard/api/node/followerredis001b",
+            "source": {
+                "type": "node_group",
+                "name": "follower_redis",
+                "href": "https://puppet-dashboard/api/group/follower_redis"
+            }
+        }
+    ],
+    "node_classes": [
+        {
+            "name": "redis",
+            "href": "https://puppet-dashboard/api/class/redis",
+            "source": {
+                "type": "node_group",
+                "name": "redis",
+                "href": "https://puppet-dashboard/api/group/redis"
+            }
+        },
+        {
+            "name": "redis::backup",
+            "href": "https://puppet-dashboard/api/class/redis::backup",
+            "source": {
+                "type": "node_group",
+                "name": "follower_redis",
+                "href": "https://puppet-dashboard/api/group/follower_redis"
+            }
+        }
+    ],
+    "parameters": {
+        "swapfile_size": {
+            "key": "swapfile_size",
+            "value": "10240",
+            "source": {
+                "type": "node_group",
+                "name": "prod",
+                "href": "https://puppet-dashboard/api/group/prod"
+            }
+        }
+    },
+    "ancestors": [
+        {
+            "source": {
+                "href": "https://puppet-dashboard/api/group/follower_redis",
+                "type": "node_group",
+                "name": "follower_redis"
+            },
+            "href": "https://puppet-dashboard/api/group/redis",
+            "name": "redis"
+        },
+        {
+            "source": {
+                "href": "https://puppet-dashboard/api/group/redis",
+                "type": "node_group",
+                "name": "redis"
+            },
+            "href": "https://puppet-dashboard/api/group/prod",
+            "name": "prod"
+        },
+        {
+            "source": {
+                "href": "https://puppet-dashboard/api/group/prod",
+                "type": "node_group",
+                "name": "prod"
+            },
+            "href": "https://puppet-dashboard/api/group/ec2",
+            "name": "ec2"
+        },
+        {
+            "source": {
+                "href": "https://puppet-dashboard/api/group/prod",
+                "type": "node_group",
+                "name": "prod"
+            },
+            "href": "https://puppet-dashboard/api/group/ubuntu",
+            "name": "ubuntu"
+        }
+    ],
+    "descendants": []
+}

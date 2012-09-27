@@ -1,0 +1,5 @@
+{
+    "nodes": "https://puppet-dashboard/api/node",
+    "node_classes": "https://puppet-dashboard/api/class",
+    "node_groups": "https://puppet-dashboard/api/group"
+}
