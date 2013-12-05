@@ -34,6 +34,7 @@ MYSQL_USER = "dashboard"
 MYSQL_PASSWD = "dashboard"
 MYSQL_DASHBOARD_DB = "dashboard"
 MYSQL_PUPPET_DB = "puppet"
+PROTOCOL = 'https'
 
 # This is the domain in which new hosts should reside. (For example, a host
 # called 'pluto001' would have the full domain name 'pluto001.example.com'.)
@@ -46,11 +47,11 @@ app = Flask(__name__)
 @app.route("/api/")
 def index():
     """API home page; lists other available endpoints in the API."""
-    data = {"nodes": "https://%s%s" % (request.host, url_for(
+    data = {"nodes": PROTOCOL + "://%s%s" % (request.host, url_for(
                      'list_nodes')),
-            "node_classes": "https://%s%s" % (request.host, url_for(
+            "node_classes": PROTOCOL + "://%s%s" % (request.host, url_for(
                             'list_node_classes')),
-            "node_groups": "https://%s%s" % (request.host, url_for(
+            "node_groups": PROTOCOL + "://%s%s" % (request.host, url_for(
                            'list_node_groups'))
             }
     response = make_response(json.dumps(data, indent=2))
@@ -63,29 +64,33 @@ def index():
 @app.route("/api/node")
 def list_nodes(status=None):
     """Lists all nodes defined in Puppet Dashboard."""
-    cur = None
-    conn = pymysql.connect(host=MYSQL_HOST, port=MYSQL_PORT,
-                           user=MYSQL_USER, passwd=MYSQL_PASSWD,
-                           db=MYSQL_PUPPET_DB)
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT h.name, fn.name, fv.value "
-                    "FROM hosts h, fact_names fn, fact_values fv "
-                    "WHERE h.id = fv.host_id "
-                    "AND fn.name in ('ec2_local_ipv4', 'ec2_public_ipv4') "
-                    "AND fn.id = fv.fact_name_id ORDER BY fv.updated_at")
-        node_facts = {}
-        for r in cur.fetchall():
-            name = r[0]
-            if name not in node_facts:
-                node_facts[name] = {'ec2_local_ipv4': None,
-                                    'ec2_public_ipv4': None}
-            fact = r[1]
-            node_facts[name][fact] = r[2]
-    finally:
-        if cur:
-            cur.close()
-        conn.close()
+
+    node_facts = {}
+
+    # In case we're not using storedconfigs in Puppet.
+    if MYSQL_PUPPET_DB:
+        cur = None
+        conn = pymysql.connect(host=MYSQL_HOST, port=MYSQL_PORT,
+                               user=MYSQL_USER, passwd=MYSQL_PASSWD,
+                               db=MYSQL_PUPPET_DB)
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT h.name, fn.name, fv.value "
+                        "FROM hosts h, fact_names fn, fact_values fv "
+                        "WHERE h.id = fv.host_id "
+                        "AND fn.name in ('ec2_local_ipv4', 'ec2_public_ipv4') "
+                        "AND fn.id = fv.fact_name_id ORDER BY fv.updated_at")
+            for r in cur.fetchall():
+                name = r[0]
+                if name not in node_facts:
+                    node_facts[name] = {'ec2_local_ipv4': None,
+                                        'ec2_public_ipv4': None}
+                fact = r[1]
+                node_facts[name][fact] = r[2]
+        finally:
+            if cur:
+                cur.close()
+            conn.close()
 
     cur = None
     conn = pymysql.connect(host=MYSQL_HOST, port=MYSQL_PORT,
@@ -120,7 +125,7 @@ def list_nodes(status=None):
         data = []
         for r in cur.fetchall():
             name = r[1]
-            url = "https://%s%s" % (request.host, url_for(
+            url = PROTOCOL + "://%s%s" % (request.host, url_for(
                                     'get_node', node_name=name))
             rec = {"name": name, "url": url}
             if name in node_facts:
@@ -147,7 +152,7 @@ def get_node(node_name):
                            db=MYSQL_DASHBOARD_DB)
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id, status FROM nodes WHERE name = '%s' LIMIT 1" %
+        cur.execute("SELECT id, status FROM nodes WHERE name = %s LIMIT 1" %
                     conn.escape(node_name))
         data = {}
         r = cur.fetchone()
@@ -168,24 +173,28 @@ def get_node(node_name):
         data['node_classes'].extend(
             get_classes_for_group(node_group['id'], node_group['name']))
 
-    cur = None
-    conn = pymysql.connect(host=MYSQL_HOST, port=MYSQL_PORT,
-                           user=MYSQL_USER, passwd=MYSQL_PASSWD,
-                           db=MYSQL_PUPPET_DB)
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT n.name, v.value "
-                    "FROM hosts h, fact_names n, fact_values v "
-                    "WHERE h.id = v.host_id AND n.id = v.fact_name_id "
-                    "AND h.name = '%s'" % conn.escape(node_name))
-        for r in cur.fetchall():
-            url = "https://" + request.host + url_for(
-                'get_node_fact', node_name=node_name, fact_name=r[0])
-            data['facts'].append({"name": r[0], "url": url, "value": r[1]})
-    finally:
-        if cur:
-            cur.close()
-        conn.close()
+
+    # In case we're not using storedconfigs in Puppet.
+    if MYSQL_PUPPET_DB:
+        cur = None
+        conn = pymysql.connect(host=MYSQL_HOST, port=MYSQL_PORT,
+                               user=MYSQL_USER, passwd=MYSQL_PASSWD,
+                               db=MYSQL_PUPPET_DB)
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT n.name, v.value "
+                        "FROM hosts h, fact_names n, fact_values v "
+                        "WHERE h.id = v.host_id AND n.id = v.fact_name_id "
+                        "AND h.name = %s" % conn.escape(node_name))
+            for r in cur.fetchall():
+                url = PROTOCOL + "://" + request.host + url_for(
+                    'get_node_fact', node_name=node_name, fact_name=r[0])
+                data['facts'].append({"name": r[0], "url": url, "value": r[1]})
+        finally:
+            if cur:
+                cur.close()
+            conn.close()
+
     response = make_response(json.dumps(data, indent=2))
     response.headers['Content-Type'] = 'application/json'
     return response
@@ -197,24 +206,30 @@ def get_node_fact(node_name, fact_name):
     """Returns the value of the specified node fact."""
     if request.method == 'PUT' or request.method == 'DELETE':
         return "This method is deprecated", 200
-    cur = None
-    conn = pymysql.connect(host=MYSQL_HOST, port=MYSQL_PORT,
-                           user=MYSQL_USER, passwd=MYSQL_PASSWD,
-                           db=MYSQL_PUPPET_DB)
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT v.value FROM hosts h, fact_names n, fact_values v "
-                    "WHERE h.id = v.host_id AND n.id = v.fact_name_id "
-                    "AND h.name = '%s' AND n.name = '%s' LIMIT 1" %
-                    (conn.escape(node_name), conn.escape(fact_name)))
-        r = cur.fetchone()
-        if r is None:
-            return "Fact not found", 404
-        data = r[0]
-    finally:
-        if cur:
-            cur.close()
-        conn.close()
+
+    # In case we're not using storedconfigs in Puppet.
+    if MYSQL_PUPPET_DB:
+        cur = None
+        conn = pymysql.connect(host=MYSQL_HOST, port=MYSQL_PORT,
+                               user=MYSQL_USER, passwd=MYSQL_PASSWD,
+                               db=MYSQL_PUPPET_DB)
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT v.value FROM hosts h, fact_names n, fact_values v "
+                        "WHERE h.id = v.host_id AND n.id = v.fact_name_id "
+                        "AND h.name = %s AND n.name = %s LIMIT 1" %
+                        (conn.escape(node_name), conn.escape(fact_name)))
+            r = cur.fetchone()
+            if r is None:
+                return "Fact not found", 404
+            data = r[0]
+        finally:
+            if cur:
+                cur.close()
+            conn.close()
+    else:
+        return "This method is disabled due to storedconfigs being disabled.", 200
+
     response = make_response(data)
     response.headers['Content-Type'] = 'text/plain'
     return response
@@ -247,7 +262,7 @@ def delete_node(node_name):
                            db=MYSQL_DASHBOARD_DB)
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id FROM nodes WHERE name = '%s' LIMIT 1" %
+        cur.execute("SELECT id FROM nodes WHERE name = %s LIMIT 1" %
                     conn.escape(node_name))
         r = cur.fetchone()
         if r is None:
@@ -290,7 +305,7 @@ def list_node_classes():
         data = []
         for r in cur.fetchall():
             name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_class', node_class_name=name)
             data.append({"name": name, "url": url})
     finally:
@@ -312,7 +327,7 @@ def get_node_class(node_class_name):
                            db=MYSQL_DASHBOARD_DB)
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id, name FROM node_classes WHERE name = '%s' "
+        cur.execute("SELECT id, name FROM node_classes WHERE name = %s "
                     "LIMIT 1" % conn.escape(node_class_name))
         data = {}
         r = cur.fetchone()
@@ -352,7 +367,7 @@ def list_node_groups():
         data = []
         for r in cur.fetchall():
             name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_group', node_group_name=name)
             data.append({"name": name, "url": url})
     finally:
@@ -374,8 +389,7 @@ def get_node_group(node_group_name):
                            db=MYSQL_DASHBOARD_DB)
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id, name FROM node_groups WHERE name = '%s'" %
-                    conn.escape(node_group_name))
+        cur.execute("SELECT id, name FROM node_groups WHERE name = %s"%(conn.escape(node_group_name)))
         data = {}
         r = cur.fetchone()
         if r is None:
@@ -448,7 +462,7 @@ def get_parameters_for_element(type, id, source):
                            user=MYSQL_USER, passwd=MYSQL_PASSWD,
                            db=MYSQL_DASHBOARD_DB)
     sql = ("SELECT id, `key`, `value` FROM parameters "
-           "WHERE parameterable_type = '%s' AND parameterable_id = %d "
+           "WHERE parameterable_type = %s AND parameterable_id = %d "
            "ORDER BY UPPER(`key`), UPPER(`value`)") % (conn.escape(type), id)
     cur = None
     result = {}
@@ -471,7 +485,7 @@ def get_parameters_for_element(type, id, source):
 
 
 def get_parameters_for_node(node_id, node_name):
-    source_url = "https://" + request.host + url_for('get_node',
+    source_url = PROTOCOL + "://" + request.host + url_for('get_node',
                                                      node_name=node_name)
     source = {'type': 'node', 'name': node_name, 'href': source_url}
     params = get_parameters_for_element("Node", node_id, source)
@@ -487,7 +501,7 @@ def get_parameters_for_node(node_id, node_name):
 
 
 def get_parameters_for_group(node_group_id, node_group_name):
-    source_url = "https://%s%s" % (request.host, url_for(
+    source_url = PROTOCOL + "://%s%s" % (request.host, url_for(
                  'get_node_group', node_group_name=node_group_name))
     source = {'type': 'node_group', 'name': node_group_name, 'href':
               source_url}
@@ -506,7 +520,7 @@ def get_parameters_for_group(node_group_id, node_group_name):
 
 def get_groups_for_node(node_id, node_name, recurse):
     result = []
-    source_url = "https://" + request.host + url_for('get_node',
+    source_url = PROTOCOL + "://" + request.host + url_for('get_node',
                                                      node_name=node_name)
     sql = ("SELECT ng.id, ng.name "
            "FROM node_group_memberships ngm, node_groups ng "
@@ -521,7 +535,7 @@ def get_groups_for_node(node_id, node_name, recurse):
         for r in cur.fetchall():
             parent_group_id = r[0]
             parent_group_name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_group', node_group_name=parent_group_name)
             result.append({'id': parent_group_id, 'name': parent_group_name,
                            'source': {'type': 'node', 'name': node_name,
@@ -538,7 +552,7 @@ def get_groups_for_node(node_id, node_name, recurse):
 
 def get_classes_for_node(node_id, node_name):
     result = []
-    source_url = "https://" + request.host + url_for("get_node",
+    source_url = PROTOCOL + "://" + request.host + url_for("get_node",
                                                      node_name=node_name)
     sql = ("SELECT nc.id, nc.name "
            "FROM node_class_memberships ncm, node_classes nc "
@@ -553,7 +567,7 @@ def get_classes_for_node(node_id, node_name):
         for r in cur.fetchall():
             node_class_id = r[0]
             node_class_name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_class', node_class_name=node_class_name)
             result.append({'id': node_class_id, 'name': node_class_name,
                            'source': {'type': 'node', 'name': node_name,
@@ -567,7 +581,7 @@ def get_classes_for_node(node_id, node_name):
 
 def get_nodes_for_class(node_class_id, node_class_name):
     result = []
-    source_url = "https://%s%s" % (request.host, url_for(
+    source_url = PROTOCOL + "://%s%s" % (request.host, url_for(
                  "get_node_class", node_class_name=node_class_name))
     sql = ("SELECT n.id, n.name FROM node_class_memberships ncm, nodes n "
            "WHERE n.id = ncm.node_id AND ncm.node_class_id = %d" %
@@ -582,7 +596,7 @@ def get_nodes_for_class(node_class_id, node_class_name):
         for r in cur.fetchall():
             node_id = r[0]
             node_name = r[1]
-            url = "https://" + request.host + url_for('get_node',
+            url = PROTOCOL + "://" + request.host + url_for('get_node',
                                                       node_name=node_name)
             result.append({'id': node_id, 'name': node_name,
                            'source': {'type': 'node_class',
@@ -597,7 +611,7 @@ def get_nodes_for_class(node_class_id, node_class_name):
 
 def get_groups_for_class(node_class_id, node_class_name):
     result = []
-    source_url = "https://%s%s" % (request.host, url_for(
+    source_url = PROTOCOL + "://%s%s" % (request.host, url_for(
                  "get_node_class", node_class_name=node_class_name))
     sql = ("SELECT ng.id, ng.name "
            "FROM node_group_class_memberships ngcm, node_groups ng "
@@ -613,7 +627,7 @@ def get_groups_for_class(node_class_id, node_class_name):
         for r in cur.fetchall():
             parent_group_id = r[0]
             parent_group_name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_group', node_group_name=parent_group_name)
             result.append({'id': parent_group_id, 'name': parent_group_name,
                            'source': {'type': 'node_class',
@@ -630,7 +644,7 @@ def get_groups_for_class(node_class_id, node_class_name):
 
 def get_nodes_for_group(node_group_id, node_group_name):
     result = []
-    source_url = "https://%s%s" % (request.host, url_for(
+    source_url = PROTOCOL + "://%s%s" % (request.host, url_for(
                  "get_node_group", node_group_name=node_group_name))
     sql = ("SELECT n.id, n.name FROM node_group_memberships ngm, nodes n "
            "WHERE n.id = ngm.node_id AND ngm.node_group_id = %d" %
@@ -645,7 +659,7 @@ def get_nodes_for_group(node_group_id, node_group_name):
         for r in cur.fetchall():
             node_id = r[0]
             node_name = r[1]
-            url = "https://" + request.host + url_for('get_node',
+            url = PROTOCOL + "://" + request.host + url_for('get_node',
                                                       node_name=node_name)
             result.append({'id': node_id, 'name': node_name,
                            'source': {'type': 'node_group',
@@ -660,7 +674,7 @@ def get_nodes_for_group(node_group_id, node_group_name):
 
 def get_classes_for_group(node_group_id, node_group_name):
     result = []
-    source_url = "https://%s%s" % (request.host, url_for(
+    source_url = PROTOCOL + "://%s%s" % (request.host, url_for(
                  'get_node_group', node_group_name=node_group_name))
     sql = ("SELECT nc.id, nc.name "
            "FROM node_group_class_memberships ngcm, node_classes nc "
@@ -676,7 +690,7 @@ def get_classes_for_group(node_group_id, node_group_name):
         for r in cur.fetchall():
             node_class_id = r[0]
             node_class_name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_class', node_class_name=node_class_name)
             result.append({'id': node_class_id, 'name': node_class_name,
                            'source': {'type': 'node_group',
@@ -691,7 +705,7 @@ def get_classes_for_group(node_group_id, node_group_name):
 
 def get_ancestors_for_group(node_group_id, node_group_name, recurse):
     result = []
-    source_url = "https://%s%s" % (request.host, url_for(
+    source_url = PROTOCOL + "://%s%s" % (request.host, url_for(
                  'get_node_group', node_group_name=node_group_name))
     sql = ("SELECT ng.id, ng.name FROM node_group_edges nge, node_groups ng "
            "WHERE ng.id = nge.to_id AND nge.from_id = %d") % (node_group_id)
@@ -705,7 +719,7 @@ def get_ancestors_for_group(node_group_id, node_group_name, recurse):
         for r in cur.fetchall():
             parent_group_id = r[0]
             parent_group_name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_group', node_group_name=parent_group_name)
             result.append({'id': parent_group_id,
                            'name': parent_group_name,
@@ -724,7 +738,7 @@ def get_ancestors_for_group(node_group_id, node_group_name, recurse):
 
 def get_descendants_for_group(node_group_id, node_group_name):
     result = []
-    source_url = "https://%s%s" % (request.host, url_for(
+    source_url = PROTOCOL + "://%s%s" % (request.host, url_for(
                  'get_node_group', node_group_name=node_group_name))
     sql = ("SELECT ng.id, ng.name FROM node_group_edges nge, node_groups ng "
            "WHERE ng.id = nge.from_id AND nge.to_id = %d") % node_group_id
@@ -738,7 +752,7 @@ def get_descendants_for_group(node_group_id, node_group_name):
         for r in cur.fetchall():
             child_group_id = r[0]
             child_group_name = r[1]
-            url = "https://" + request.host + url_for(
+            url = PROTOCOL + "://" + request.host + url_for(
                 'get_node_group', node_group_name=child_group_name)
             result.append({'id': child_group_id,
                            'name': child_group_name,
